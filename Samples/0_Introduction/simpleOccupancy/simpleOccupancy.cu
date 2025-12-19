@@ -25,6 +25,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <cstdint>
 #include <helper_cuda.h> // helper functions for CUDA error check
 #include <iostream>
 
@@ -38,7 +39,7 @@ const int manualBlockSize = 32;
 // execution configuration, including anything the launch configurator
 // API suggests.
 ////////////////////////////////////////////////////////////////////////////////
-__global__ void square(int *array, int arrayCount)
+__global__ void square(uint32_t *array, int arrayCount)
 {
     extern __shared__ int dynamicSmem[];
     int                   idx = threadIdx.x + blockIdx.x * blockDim.x;
@@ -99,7 +100,7 @@ static double reportPotentialOccupancy(void *kernel, int blockSize, size_t dynam
 // This function configures the launch based on the "automatic"
 // argument, records the runtime, and reports occupancy and runtime.
 ////////////////////////////////////////////////////////////////////////////////
-static int launchConfig(int *array, int arrayCount, bool automatic)
+static int launchConfig(uint32_t *array, int arrayCount, bool automatic)
 {
     int    blockSize;
     int    minGridSize;
@@ -166,20 +167,20 @@ static int launchConfig(int *array, int arrayCount, bool automatic)
 ////////////////////////////////////////////////////////////////////////////////
 static int test(bool automaticLaunchConfig, const int count = 1000000)
 {
-    int *array;
-    int *dArray;
-    int  size = count * sizeof(int);
+    uint32_t *array;
+    uint32_t *dArray;
+    int       size = count * sizeof(uint32_t);
 
-    array = new int[count];
+    array = new uint32_t[count];
 
-    for (int i = 0; i < count; i += 1) {
+    for (uint32_t i = 0; i < count; i += 1) {
         array[i] = i;
     }
 
     checkCudaErrors(cudaMalloc(&dArray, size));
     checkCudaErrors(cudaMemcpy(dArray, array, size, cudaMemcpyHostToDevice));
 
-    for (int i = 0; i < count; i += 1) {
+    for (uint32_t i = 0; i < count; i += 1) {
         array[i] = 0;
     }
 
@@ -189,8 +190,9 @@ static int test(bool automaticLaunchConfig, const int count = 1000000)
     checkCudaErrors(cudaFree(dArray));
 
     // Verify the return data
+    // Both GPU and CPU use uint32_t * uint32_t, which has well-defined overflow behavior (modulo 2^32)
     //
-    for (int i = 0; i < count; i += 1) {
+    for (uint32_t i = 0; i < count; i += 1) {
         if (array[i] != i * i) {
             std::cout << "element " << i << " expected " << i * i << " actual " << array[i] << std::endl;
             return 1;
