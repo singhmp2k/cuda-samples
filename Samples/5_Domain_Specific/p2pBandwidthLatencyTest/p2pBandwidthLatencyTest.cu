@@ -124,16 +124,26 @@ bool detectFallback(int numGPUs)
     cudaStream_t s;
     cudaStreamCreateWithFlags(&s, cudaStreamNonBlocking);
 
-    size_t testElems = 1; // 比如 1M ints (4MB)
+    size_t testElems = 1;
     cudaMalloc(&tmp0, testElems * sizeof(int));
     cudaSetDevice(1);
     cudaMalloc(&tmp1, testElems * sizeof(int));
     cudaCheckError();
 
+    // Explicitly ensure P2P is disabled for this test
+    // (Clear any pre-existing P2P access if it happens to be enabled)
+    cudaSetDevice(0);
+    cudaDeviceDisablePeerAccess(1);
+    cudaGetLastError(); // Clear error if peer access was not enabled
+
+    cudaSetDevice(1);
+    cudaDeviceDisablePeerAccess(0);
+    cudaGetLastError(); // Clear error if peer access was not enabled
+
     bool        needsFallback = false;
     cudaError_t testErr       = cudaMemcpyPeerAsync(tmp1, 1, tmp0, 0, testElems * sizeof(int), s);
 
-    if (testErr == cudaErrorNotSupported) {
+    if (testErr == cudaErrorPeerAccessNotEnabled || testErr == cudaErrorNotSupported) {
         needsFallback = true;
         printf("Note: cudaMemcpyPeerAsync reported '%s' - will use host-mediated copy when P2P is disabled\n",
                cudaGetErrorString(testErr));
@@ -208,7 +218,7 @@ void performP2PCopy(int         *dest,
         cudaCheckError();
     }
     else {
-        // Use cudaMemcpyPeerAsync (original behavior)
+        // Use cudaMemcpyPeerAsync
         for (int r = 0; r < repeat; r++) {
             cudaMemcpyPeerAsync(dest, destDevice, src, srcDevice, sizeof(int) * num_elems, streamToRun);
         }
